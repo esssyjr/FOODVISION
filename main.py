@@ -9,117 +9,109 @@ import io
 import logging
 from pydantic import BaseModel
 
-# Logging setup
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# FastAPI app
+# App initialization
 app = FastAPI(title="Nigerian Food Vision API")
 
-# CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can restrict this to your frontend
+    allow_origins=["*"],  # change to your frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# API Keys
+# Set API Keys
 API_KEYS = [
     os.getenv("GOOGLE_API_KEY_1", "AIzaSyBvtwP2ulNHPQexfPhhR13U30pvF2OswrU"),
     os.getenv("GOOGLE_API_KEY_2", "AIzaSyD0dLXPPrZmLbnHOj3f9twHmT_PZc15wMo"),
 ]
 
-# Store current food name for follow-up queries
-food_history = {"last_detected_food": None}
+# Model options
+INFO_OPTIONS = [
+    "Calories content",
+    "Diabetic friendly?",
+    "Preparation method",
+    "Ingredients",
+    "Nutritional content",
+    "Allergen info",
+    "Hypertension friendly?",
+    "Kidney safe?"
+]
 
-# BaseModel for follow-up requests
-class InfoRequest(BaseModel):
-    food_name: str
-    info_type: str  # One of the 8 options
-    lang: str = "english"
+# Configure Gemini
+def configure_gemini():
+    api_key = random.choice(API_KEYS)
+    if not api_key:
+        raise ValueError("No valid API key provided.")
+    generativeai.configure(api_key=api_key)
+    return generativeai.GenerativeModel("gemini-1.5-flash")
 
-# Image Upload + Detection Endpoint
-@app.post("/detect")
+# Endpoint 1: Upload image and detect food name
+@app.post("/detect_food")
 async def detect_food(image: UploadFile = File(...), lang: str = Form(default="english")):
     try:
         image_data = await image.read()
-        try:
-            pil_image = Image.open(io.BytesIO(image_data))
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid image format. Upload a JPEG or PNG.")
+        img = Image.open(io.BytesIO(image_data))
 
-        if pil_image.format not in ["JPEG", "PNG"]:
+        if img.format not in ["JPEG", "PNG"]:
             raise HTTPException(status_code=400, detail="Only JPEG or PNG images are supported.")
 
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
-            pil_image.save(temp_file.name, format="JPEG")
+            img.save(temp_file.name)
             image_path = temp_file.name
 
-        api_key = random.choice(API_KEYS)
-        if not api_key:
-            raise HTTPException(status_code=500, detail="No valid Google API key available.")
-
-        generativeai.configure(api_key=api_key)
-
-        # Upload image and detect
+        model = configure_gemini()
         uploaded = generativeai.upload_file(path=image_path, mime_type="image/jpeg")
-        model = generativeai.GenerativeModel("gemini-1.5-flash")
 
-        prompt = (
-            f"This is an image of Nigerian food. Just return the name of the food item in one or two words. "
-            f"Don't describe, explain, or add extra text. Output in {lang}."
-        )
-
+        prompt = f"Identify the name of the Nigerian food shown in the image. Respond with ONLY the name (e.g., Jollof rice, Egusi soup, etc)."
         response = model.generate_content([uploaded, prompt])
+        os.unlink(image_path)
+
         food_name = response.text.strip()
 
-        # Save last food name
-        food_history["last_detected_food"] = food_name
-
-        os.unlink(image_path)
-        return {"food_name": food_name, "message": f"Detected food: {food_name}"}
+        return {
+            "food_name": food_name,
+            "options": INFO_OPTIONS
+        }
 
     except Exception as e:
-        logger.error(f"Error in /detect: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.error(f"Error in detect_food: {e}")
+        raise HTTPException(status_code=500, detail=f"Detection error: {e}")
 
+# Request model for /food_info
+class InfoRequest(BaseModel):
+    food_name: str
+    info_type: str  # e.g., "Calories content"
 
-# Follow-up Info Endpoint
-@app.post("/food-info")
-async def get_food_info(req: InfoRequest):
+# Endpoint 2: Get more info about detected food
+@app.post("/food_info")
+async def food_info(request: InfoRequest):
     try:
-        if not req.food_name:
-            req.food_name = food_history.get("last_detected_food")
-
-        if not req.food_name:
-            raise HTTPException(status_code=400, detail="No food name provided or previously detected.")
-
-        api_key = random.choice(API_KEYS)
-        generativeai.configure(api_key=api_key)
-        model = generativeai.GenerativeModel("gemini-1.5-flash")
+        model = configure_gemini()
 
         prompt = (
-            f"Give {req.info_type.lower()} information for {req.food_name}, a Nigerian food. "
-            f"Respond in a short, friendly, and clear paragraph in {req.lang}."
+            f"You are a Nigerian food expert. Give specific information about {request.food_name}. "
+            f"The user is asking: '{request.info_type}'. Provide the answer in a friendly, short, and informative tone."
         )
-
         response = model.generate_content(prompt)
+
         return {
-            "food_name": req.food_name,
-            "info_type": req.info_type,
+            "food_name": request.food_name,
+            "info_type": request.info_type,
             "response": response.text.strip()
         }
 
     except Exception as e:
-        logger.error(f"Error in /food-info: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.error(f"Error in food_info: {e}")
+        raise HTTPException(status_code=500, detail=f"Info error: {e}")
 
-
-# Welcome
+# Root endpoint
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to the Nigerian Food Vision API! Upload a food image via POST /detect, then use /food-info with 8 options for further info."
+        "message": "Welcome to Nigerian Food Vision API. Use /detect_food to upload a cuisine image and /food_info to query for more info."
     }
