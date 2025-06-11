@@ -27,8 +27,8 @@ app.add_middleware(
 
 # API Keys
 API_KEYS = [
-    os.getenv("GOOGLE_API_KEY_1", ""),
-    os.getenv("GOOGLE_API_KEY_2", ""),
+    os.getenv("GOOGLE_API_KEY_1", "AIzaSyBvtwP2ulNHPQexfPhhR13U30pvF2OswrU"),
+    os.getenv("GOOGLE_API_KEY_2", "AIzaSyD0dLXPPrZmLbnHOj3f9twHmT_PZc15wMo"),
 ]
 
 # Store current food name for follow-up queries
