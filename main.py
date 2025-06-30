@@ -28,6 +28,9 @@ app.add_middleware(
 API_KEYS = [
     os.getenv("GOOGLE_API_KEY_1", "AIzaSyBvtwP2ulNHPQexfPhhR13U30pvF2OswrU"),
     os.getenv("GOOGLE_API_KEY_2", "AIzaSyD0dLXPPrZmLbnHOj3f9twHmT_PZc15wMo"),
+    os.getenv("GOOGLE_API_KEY_2", "AIzaSyCKYS00SLw0-vOLaPbhCPjK2ghpA5jrj9A"),
+    os.getenv("GOOGLE_API_KEY_2", "AIzaSyAvcvFgl-gjutXpsLW_jnC-zSs6lTXXiU0"),
+    
 ]
 
 # Model options
@@ -67,7 +70,7 @@ async def detect_food(image: UploadFile = File(...), lang: str = Form(default="e
         model = configure_gemini()
         uploaded = generativeai.upload_file(path=image_path, mime_type="image/jpeg")
 
-        prompt = f"Identify the name of the Nigerian food shown in the image. Respond with ONLY the name (e.g., Jollof rice, Egusi soup, etc)."
+        prompt = f"Identify the name of the food shown in the image. Respond with ONLY the name (e.g., Jollof rice, Egusi soup, etc)."
         response = model.generate_content([uploaded, prompt])
         os.unlink(image_path)
 
@@ -94,7 +97,7 @@ async def food_info(request: InfoRequest):
         model = configure_gemini()
 
         prompt = (
-            f"You are a Nigerian food expert. Give specific information about {request.food_name}. "
+            f"You are a food detection expert. Give specific information about {request.food_name}. "
             f"The user is asking: '{request.info_type}'. Provide the answer in a friendly, short, and informative tone."
         )
         response = model.generate_content(prompt)
