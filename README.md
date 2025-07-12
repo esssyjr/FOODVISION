@@ -1,4 +1,4 @@
-# 🍛 Nigerian Food Vision API
+# Food Vision API
 
 AI-powered image recognition API to identify Nigerian dishes and provide detailed food insights like calories, ingredients, preparation, and health compatibility.
 
